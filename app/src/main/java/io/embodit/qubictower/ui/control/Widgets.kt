@@ -65,10 +65,10 @@ internal fun PrimaryButton(text: String, tag: String, onClick: () -> Unit, modif
 }
 
 @Composable
-internal fun SecondaryButton(text: String, tag: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, danger: Boolean = false, icon: Int? = null) {
+internal fun SecondaryButton(text: String, tag: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, danger: Boolean = false, icon: Int? = null, height: Dp = 52.dp) {
     Button(
         onClick = onClick, modifier = modifier, enabled = enabled,
-        size = ButtonDefaults.Regular.copy(height = 52.dp, minWidth = 96.dp),
+        size = ButtonDefaults.Regular.copy(height = height, minWidth = 96.dp),
         shape = RoundedCornerShape(26.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = if (danger) QtColors.Error else PicoTheme.colorScheme.fillSecondary,

@@ -43,6 +43,10 @@ object QtColors {
     val CeladonInk = Color(0xFF0F5E58)
     val Graphite = Color(0xFF2B2F36)
     val Frost = Color(0xFFE6EAEE)
+    /** Peg-top marker: the frosted peg's colour family, half a shade darker, opaque (board-input 通用模式). */
+    val PegMarker = Color(0xFFB4BCC6)
+    /** The selected peg (confirm phase): a cool blue none of the beams / rings use. */
+    val SelectGlow = Color(0xFF5DB8FF)
     val BeamWhite = Color(0xFFF4F6F8)
     val BeamGrey = Color(0xFF9AA0A8)
     val Danger = Color(0xFFE5483F)

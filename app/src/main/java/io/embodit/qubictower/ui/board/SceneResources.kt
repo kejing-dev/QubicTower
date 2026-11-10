@@ -50,6 +50,12 @@ internal class SceneResources private constructor() {
     lateinit var ringCell: MeshResource; private set
     lateinit var ringTop: MeshResource; private set
     lateinit var dot: MeshResource; private set
+    /** Ø 5 mm drop-point marker on each peg top (the system hover draws on it, board-input 通用模式). */
+    lateinit var marker: MeshResource; private set
+    lateinit var markerMat: Material; private set
+    /** The selected peg (confirm phase, v0.1.1): a soft light column round the peg + a ring on its top. */
+    lateinit var selColumn: Material; private set
+    lateinit var selRing: Material; private set
     /** Beam materials by tint, x-ray (no depth test) and depth-tested. */
     lateinit var beamXray: Map<Display.Tint, UnlitMaterial>; private set
     lateinit var beamDepth: Map<Display.Tint, UnlitMaterial>; private set
@@ -80,6 +86,10 @@ internal class SceneResources private constructor() {
         const val STYLE_SEE = 3
         const val GRIP_SEGMENTS = 12
         const val GRIP_R = 0.1375f
+        const val MARKER_R = 0.0025f
+        const val MARKER_H = 0.0015f
+        /** Diameter of the selection light column (wider than a bead, so it wraps the beads already on the peg). */
+        const val SEL_COLUMN_D = 0.034f
 
         private fun unlit(color: Color, opacity: Float, xray: Boolean = false): UnlitMaterial =
             UnlitMaterial.create(if (opacity < 1f) BlendingMode.TRANSPARENT else BlendingMode.OPAQUE).apply {
@@ -124,6 +134,11 @@ internal class SceneResources private constructor() {
                 async(io) { r.ringCell = MeshResource.createTorus(outerRingRadius = 0.0285f, innerRingRadius = 0.0255f).keep() },
                 async(io) { r.ringTop = MeshResource.createTorus(outerRingRadius = 0.0095f, innerRingRadius = 0.0065f).keep() },
                 async(io) { r.dot = MeshResource.createTorus(outerRingRadius = 0.0050f, innerRingRadius = 0.0005f).keep() },
+                // gate:allow geometry Ø 5 mm drop-point marker on each peg top: abstract marker the system hover draws on (board-input README 通用模式)
+                async(io) { r.marker = MeshResource.createCylinder(radius = MARKER_R, height = MARKER_H).keep() },
+                async(io) { r.markerMat = pbr(QtColors.PegMarker, 0.55f).keep() },
+                async(io) { r.selColumn = unlit(QtColors.SelectGlow, 0.22f).keep() },
+                async(io) { r.selRing = unlit(QtColors.SelectGlow, 0.95f).keep() },
                 async(io) { r.ghost = unlit(QtColors.BeamWhite, 0.85f).keep() },
                 async(io) { r.hover = unlit(QtColors.HoverCream, 0.55f).keep() },
                 async(io) { r.green = unlit(QtColors.HintGreen, 0.95f).keep() },

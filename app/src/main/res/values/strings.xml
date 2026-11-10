@@ -64,8 +64,8 @@
     <string name="status_lit">Every lit peg top is open. Pinch one and watch the lines.</string>
     <string name="status_aim_own">This spot joins a %1$s. You\'ve got %2$d on it already.</string>
     <string name="status_aim_block">This spot blocks its %s.</string>
-    <string name="status_aim_plain">%1$s, layer %2$d. Pinch the same peg again to drop.</string>
-    <string name="status_aim_win">This one wins. Pinch again.</string>
+    <string name="status_aim_plain">%1$s, layer %2$d. Pinch it again or press Drop.</string>
+    <string name="status_aim_win">This one wins. Pinch again or press Drop.</string>
     <string name="status_must_block">Three in a row. Fill the red spot or that\'s the game.</string>
     <string name="status_must_block_title">Block it: %s</string>
     <string name="status_thinking">%s is thinking. Hang on.</string>
@@ -126,7 +126,7 @@
     <string name="rules_title">How to play</string>
     <string name="welcome_title">Welcome. Three steps.</string>
     <string name="rules_1">Pick a peg, pinch. The bead does the sliding.</string>
-    <string name="rules_2">Pinch the same peg again to drop. One click per layer.</string>
+    <string name="rules_2">Pinch the same peg again or press Drop. Missed? The arrow keys move it one peg.</string>
     <string name="rules_3">Any four in a line wins, even through the layers. Push the rim to turn it.</string>
     <string name="rules_mistakes">Common slips</string>
     <string name="mistake_1">Don\'t stare at one layer. Cross-layer diagonals sneak up on you. Look at every line that lights up.</string>
@@ -160,4 +160,18 @@
     <string name="legend_block">Must block</string>
     <string name="lines_through">Lines through this spot: %d</string>
     <string name="line_summary">%1$s: threes %2$d · twos %3$d</string>
+    <string name="pad_up">Up</string>
+    <string name="pad_down">Down</string>
+    <string name="pad_left">Left</string>
+    <string name="pad_right">Right</string>
+    <string name="pad_drop">Drop</string>
+    <string name="pad_cancel">Cancel</string>
+    <string name="pad_title">Selected %s</string>
+    <string name="pad_note">Up is the far row. It turns with the tower.</string>
+    <string name="pad_up_cd">Move the selection one row farther</string>
+    <string name="pad_down_cd">Move the selection one row nearer</string>
+    <string name="pad_left_cd">Move the selection one peg left</string>
+    <string name="pad_right_cd">Move the selection one peg right</string>
+    <string name="pad_turn_left">Turn left</string>
+    <string name="pad_turn_right">Turn right</string>
 </resources>

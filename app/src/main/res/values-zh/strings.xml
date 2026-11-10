@@ -64,8 +64,8 @@
     <string name="status_lit">亮着的柱顶都能投。捏一根，先看线。</string>
     <string name="status_aim_own">这格接上一条%1$s，你已经有 %2$d 颗了。</string>
     <string name="status_aim_block">这格堵住它的一条%s。</string>
-    <string name="status_aim_plain">%1$s 第 %2$d 层。再捏一下同一根柱就丢。</string>
-    <string name="status_aim_win">这一手就赢。再捏一下。</string>
+    <string name="status_aim_plain">%1$s 第 %2$d 层。再捏同一根柱，或按确定。</string>
+    <string name="status_aim_win">这一手就赢。再捏一下，或按确定。</string>
     <string name="status_must_block">它三连了，红线那格你不堵，下一手就输。</string>
     <string name="status_must_block_title">必须挡：%s</string>
     <string name="status_thinking">%s在想，别急。</string>
@@ -126,7 +126,7 @@
     <string name="rules_title">怎么玩</string>
     <string name="welcome_title">欢迎。三步就会。</string>
     <string name="rules_1">看准一根柱，捏一下。珠子自己滑下去。</string>
-    <string name="rules_2">再捏一下同一根柱就丢，一层一声「哒」。</string>
+    <string name="rules_2">再捏同一根柱或按确定才落。没选准，用控制窗的方向键挪一格。</string>
     <string name="rules_3">横竖斜、穿层、体对角，四颗同色就赢。推转台边转过去看。</string>
     <string name="rules_mistakes">新手常错</string>
     <string name="mistake_1">只盯着一层看。穿层的斜线最容易漏，瞄准时亮出来的线都扫一眼。</string>
@@ -160,4 +160,18 @@
     <string name="legend_block">必挡</string>
     <string name="lines_through">经过这格的线：%d 条</string>
     <string name="line_summary">%1$s：三连 %2$d 条 · 两连 %3$d 条</string>
+    <string name="pad_up">上</string>
+    <string name="pad_down">下</string>
+    <string name="pad_left">左</string>
+    <string name="pad_right">右</string>
+    <string name="pad_drop">确定</string>
+    <string name="pad_cancel">取消</string>
+    <string name="pad_title">选中 %s</string>
+    <string name="pad_note">上是远一排，跟着转塔走。</string>
+    <string name="pad_up_cd">选中挪到远一排</string>
+    <string name="pad_down_cd">选中挪到近一排</string>
+    <string name="pad_left_cd">选中挪到左边一根</string>
+    <string name="pad_right_cd">选中挪到右边一根</string>
+    <string name="pad_turn_left">左转</string>
+    <string name="pad_turn_right">右转</string>
 </resources>

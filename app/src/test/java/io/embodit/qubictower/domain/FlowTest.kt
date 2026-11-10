@@ -241,4 +241,56 @@ class FlowTest {
         h.flow.setHint(true); runCurrent(); advanceUntilIdle()
         assertEquals(3, h.st.hint)   // Celadon must block D1
     }
+
+    /** v0.1.1 精确选择: select silently, nudge in the confirm phase (view-relative, after a turn too), confirm drops, cancel. */
+    @Test fun confirmPhaseNudgeConfirmAndCancel() = runTest {
+        val h = Harness(this)
+        h.flow.newGame(GameConfig(Mode.PVP)); runCurrent()
+        val B2 = Qubic.parsePeg("B2")!!
+        // nothing selected: the stick / arrows do nothing
+        assertFalse(h.flow.nudge(Dir.RIGHT, "test")); assertEquals(Phase.IDLE, h.st.phase)
+        h.sounds.clear()
+        h.flow.tapPeg(B2); runCurrent()
+        assertEquals(Phase.AIMING, h.st.phase)
+        assertTrue(h.flow.nudge(Dir.RIGHT, "test")); runCurrent()
+        assertEquals("C2", Qubic.pegName(h.st.aim!!))
+        assertTrue(h.flow.nudge(Dir.UP, "test")); runCurrent()
+        assertEquals("C1", Qubic.pegName(h.st.aim!!))
+        assertFalse(h.flow.nudge(Dir.UP, "test"))               // the far edge: stays
+        assertEquals("C1", Qubic.pegName(h.st.aim!!))
+        assertFalse(h.flow.canNudge(Dir.UP)); assertTrue(h.flow.canNudge(Dir.DOWN))
+        // D51: selecting, moving the selection and hitting the edge are silent
+        assertTrue("selection sounds ${h.sounds}", h.sounds.isEmpty())
+        // a quarter turn: the same "right" now follows the tower as seen
+        h.flow.turnButton(1); advanceTimeBy(Turntable.BUTTON_MS + 50); runCurrent()
+        val before = h.st.aim!!
+        assertTrue(h.flow.nudge(Dir.RIGHT, "test")); runCurrent()
+        assertEquals(Nudge.adjacent(before, Dir.RIGHT, h.st.orientation), h.st.aim)
+        // cancel: back to nothing selected, bead home, silent
+        h.sounds.clear()
+        h.flow.cancelSelection("test"); runCurrent()
+        assertEquals(Phase.IDLE, h.st.phase); assertNull(h.st.aim); assertEquals(32, h.st.trayCount(0))
+        assertTrue(h.sounds.isEmpty())
+        // select again and confirm = the drop (and only the drop makes sound: ticks + land)
+        h.flow.tapPeg(B2); runCurrent()
+        h.flow.confirmAim("test"); runCurrent()
+        assertEquals(Phase.DROPPING, h.st.phase); assertEquals(listOf(B2), h.st.moves)
+        advanceTimeBy(Layout.dropMs(0) + 20); runCurrent()
+        assertTrue(h.sounds.contains(Sound.LAND))
+        assertTrue(h.sounds.all { it == Sound.LAND || it == Sound.TICK })
+        // confirm with nothing selected does nothing
+        h.flow.confirmAim("test"); runCurrent()
+        assertEquals(1, h.st.moves.size)
+    }
+
+    @Test fun nudgeStepsOverFullPegsAndIsLockedByAConfirm() = runTest {
+        val h = Harness(this)
+        val C2 = Qubic.parsePeg("C2")!!
+        h.flow.importMoves(List(4) { C2 }, GameConfig(Mode.PVP)); runCurrent()   // C2 full
+        h.flow.tapPeg(Qubic.parsePeg("B2")!!); runCurrent()
+        assertTrue(h.flow.nudge(Dir.RIGHT, "test")); runCurrent()
+        assertEquals("D2", Qubic.pegName(h.st.aim!!))
+        h.flow.requestConfirm(ConfirmKind.RESIGN); runCurrent()  // aim cancelled, tower locked
+        assertFalse(h.flow.nudge(Dir.LEFT, "test"))
+    }
 }
