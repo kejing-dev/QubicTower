@@ -52,6 +52,8 @@ class Graph(context: Context) {
         log = { Log.i(TAG, it) },
     )
     val window = WindowCtl()
+    /** Thumbstick / controller buttons / D-pad keys in the confirm phase (v0.1.1). */
+    val pad = PadInput(this)
 
     init {
         scope.launch {
@@ -74,7 +76,8 @@ val VOLUME_PERCENT = intArrayOf(35, 65, 100)
 /**
  * Short effects from assets/sounds/<name>.wav (+ _2 / _3 / _4 variants) through a SoundPool. Physical sounds (CC0
  * recordings: lift, slide, tick, land, return, turn, snap, clear) rotate their variants and get a random ±5 % pitch on
- * top of the caller's rate, never the same variant twice in a row (design sound.variation, profile D51).
+ * top of the caller's rate, never the same variant twice in a row (design sound.variation, profile D51). One stream per
+ * sound at a time (a new one stops the old: rapid drops never stack, five quick drops peak <= -1 dBFS).
  */
 class SoundPlayer(context: Context) {
     @Volatile var enabled = true
@@ -87,7 +90,7 @@ class SoundPlayer(context: Context) {
     private val loaded = HashSet<Int>()
     private val random = Random(11)
     private val lastVariant = HashMap<Sound, Int>()
-    private val physical = setOf(Sound.LIFT, Sound.SLIDE, Sound.TICK, Sound.LAND, Sound.RETURN, Sound.TURN, Sound.SNAP, Sound.CLEAR)
+    private val physical = setOf(Sound.LIFT, Sound.TICK, Sound.LAND, Sound.RETURN, Sound.TURN, Sound.SNAP, Sound.CLEAR)
 
     init {
         pool.setOnLoadCompleteListener { _, id, status -> if (status == 0) synchronized(loaded) { loaded += id } }
@@ -104,7 +107,8 @@ class SoundPlayer(context: Context) {
     fun play(s: Sound, rate: Float = 1f) {
         if (!enabled) return
         val variants = ids[s] ?: return
-        val vol = VOLUME_PERCENT[volumeLevel.coerceIn(0, 2)] / 100f
+        // §15.2 layering: the drop (LAND) is the loudest; the passing ticks sit under it
+        val vol = VOLUME_PERCENT[volumeLevel.coerceIn(0, 2)] / 100f * (GAIN[s] ?: 1f)
         var r = rate
         var v = 0
         if (s in physical) {
@@ -115,7 +119,23 @@ class SoundPlayer(context: Context) {
         }
         val id = variants[v]
         if (synchronized(loaded) { id !in loaded }) return
-        pool.play(id, vol, vol, 1, 0, r.coerceIn(0.5f, 2f))
+        // D51 同类不叠加: one instance per sound at a time — the new one stops the previous stream of the same sound
+        // a bead's passing ticks and its landing are one class ("drop"): the land stops the last tick (no summed peak)
+        val group = GROUP[s] ?: s.name
+        synchronized(streams) {
+            streams[group]?.let { pool.stop(it) }
+            val sid = pool.play(id, vol, vol, 1, 0, r.coerceIn(0.5f, 2f))
+            if (sid != 0) streams[group] = sid
+        }
+    }
+
+    private val streams = HashMap<String, Int>()
+
+    companion object {
+        /** Relative playback gain per sound (board-game §15.2); everything else 1.0. tools/loudness.py uses the same table. */
+        val GAIN = mapOf(Sound.TICK to 0.6f, Sound.RETURN to 0.7f)
+        /** Sounds sharing one stream (a new one stops the other); everything else is its own class. */
+        val GROUP = mapOf(Sound.TICK to "drop", Sound.LAND to "drop")
     }
 
     fun release() = runCatching { pool.release() }

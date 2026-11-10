@@ -175,11 +175,7 @@ glass = ((1, 1.0), (2.76, 0.12), (5.4, 0.04))
 # illegal: a short muted knock (full peg, not your turn)
 write('illegal', lowpass(0.9 * mode(420, 0.025, 0.12) + 0.3 * mode(860, 0.012, 0.12), 1800, 1), -2)
 
-# lines: a short soft shimmer when the lines light up (two quick high glass notes)
-x = silence(0.35)
-x = place(x, note(1567.98, 0.3, 0.12, partials=glass, attack=0.004), 0.0)
-x = place(x, 0.7 * note(2093.0, 0.25, 0.10, partials=glass, attack=0.004), 0.05)
-write('lines', x, -4)
+# (v0.1.1: no "lines" cue any more — selecting a peg is silent, D51)
 
 # block: a lower two-note warning (must-block line, three in a row)
 x = silence(0.5)

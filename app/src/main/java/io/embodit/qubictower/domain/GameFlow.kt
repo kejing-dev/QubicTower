@@ -18,7 +18,8 @@ enum class Phase(val id: String) {
     LOADING("S00"), SETUP("S02"), IDLE("S03"), AIMING("S04"), DROPPING("S05"), THINKING("S06"), CLEARING("S07"), RESULT("S09"),
 }
 
-enum class Sound { LIFT, SLIDE, TICK, LAND, RETURN, ILLEGAL, LINES, BLOCK, TURN, SNAP, CLEAR, WIN, NOTE, DRAW, HINT }
+/** v0.1.1: no SLIDE / LINES any more (selecting and moving the selection are silent, D51). */
+enum class Sound { LIFT, TICK, LAND, RETURN, ILLEGAL, BLOCK, TURN, SNAP, CLEAR, WIN, NOTE, DRAW, HINT }
 
 /** S08 one-liners; [peg] is where the red ring flashes (-1 = none). */
 enum class AlertKind { FULL, BUSY, NOT_YOUR_TURN, OVER, START_FIRST, TURNING }
@@ -328,10 +329,51 @@ class GameFlow(
         val st = s
         val from = if (st.aim != null) AimFrom(peg = st.aim) else AimFrom(traySlot = Layout.nextSlot(st.side, st.trayCount(st.side)))
         set(st.copy(phase = Phase.AIMING, aim = peg, aimFrom = from, aimAt = clock(), alert = null, linger = null, restored = false, note = null))
-        sound(if (st.aim != null) Sound.SLIDE else Sound.LIFT)
-        sound(Sound.LINES)
+        // D51 / board-input 精确选择: selecting and moving the selection are silent; only the drop sounds (v0.1.1)
         val cell = st.board.landing(peg)
         log("AIM ${Qubic.pegName(peg)} cell=$cell lines=${Qubic.LINES_THROUGH[cell].size} S04")
+    }
+
+    /**
+     * Confirm phase (S04): move the selection one peg [dir] as the user sees the tower (thumbstick / the panel's arrow
+     * keys / debug `nudge`). Full pegs are stepped over; at the edge nothing moves. Returns whether it moved.
+     */
+    fun nudge(dir: Dir, via: String = "panel"): Boolean {
+        val st = s
+        if (locked()) return false
+        if (st.buttonTurning) { log("NUDGE ignored turning (S14) via=$via"); return false }
+        val from = st.aim
+        if (st.phase != Phase.AIMING || from == null) { log("NUDGE ignored phase=${st.phase.id} via=$via"); return false }
+        val to = Nudge.next(from, dir, st.orientation) { st.board.canDrop(it) }
+        if (to == null) { log("NUDGE $dir edge at ${Qubic.pegName(from)} orientation=${st.orientation} via=$via"); return false }
+        log("NUDGE $dir ${Qubic.pegName(from)} -> ${Qubic.pegName(to)} orientation=${st.orientation} via=$via")
+        aimAt(to)
+        return true
+    }
+
+    /** Whether [nudge] would move now (the panel greys an arrow out at the edge). */
+    fun canNudge(dir: Dir, st: PlayState = s): Boolean {
+        val from = st.aim ?: return false
+        if (st.phase != Phase.AIMING || st.buttonTurning || st.confirm != null) return false
+        return Nudge.next(from, dir, st.orientation) { st.board.canDrop(it) } != null
+    }
+
+    /** [确定] / trigger / A in the confirm phase: drop the selected bead (same as a second pinch on the same peg). */
+    fun confirmAim(via: String = "panel") {
+        val st = s
+        if (locked()) return
+        val peg = st.aim
+        if (st.phase != Phase.AIMING || peg == null || st.buttonTurning) { log("CONFIRM-AIM ignored phase=${st.phase.id} via=$via"); return }
+        log("CONFIRM-AIM ${Qubic.pegName(peg)} via=$via")
+        drop(peg)
+    }
+
+    /** [取消] / B in the confirm phase: the bead goes home, nothing selected (S04 -> S03). */
+    fun cancelSelection(via: String = "panel") {
+        if (locked()) return
+        if (s.phase != Phase.AIMING) { log("CANCEL-AIM ignored phase=${s.phase.id} via=$via"); return }
+        log("CANCEL-AIM via=$via")
+        cancelAim()
     }
 
     fun cancelAim() {
@@ -340,7 +382,7 @@ class GameFlow(
         val n = st.trayCount(st.side)  // already excludes the aimed bead
         val item = ReturnItem(st.side, -1, peg, Layout.returnSlot(st.side, n), clock(), 0L, ms(Layout.LIFT_MS))
         set(st.copy(phase = Phase.IDLE, aim = null, returns = st.returns + item))
-        sound(Sound.RETURN)
+        // silent: cancelling a selection is part of choosing (D51 预选无声), not a move
         scheduleReturnCleanup()
         log("CANCEL aim -> S03")
     }

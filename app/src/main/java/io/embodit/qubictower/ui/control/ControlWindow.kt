@@ -1,5 +1,8 @@
 package io.embodit.qubictower.ui.control
 
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.focusable
 import android.app.ActivityManager
 import android.content.Context
 import android.os.Handler
@@ -46,6 +49,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pico.spatial.ui.design.CircularProgressIndicator
 import com.pico.spatial.ui.design.Icon
+import com.pico.spatial.ui.design.Button
+import com.pico.spatial.ui.design.ButtonDefaults
 import com.pico.spatial.ui.design.PicoTheme
 import com.pico.spatial.ui.design.windows.TabBar
 import com.pico.spatial.ui.platform.ViewPoint
@@ -53,6 +58,7 @@ import io.embodit.qubictower.BuildConfig
 import io.embodit.qubictower.R
 import io.embodit.qubictower.domain.AlertKind
 import io.embodit.qubictower.domain.ConfirmKind
+import io.embodit.qubictower.domain.Dir
 import io.embodit.qubictower.domain.Display
 import io.embodit.qubictower.domain.Engine
 import io.embodit.qubictower.domain.GameSetup
@@ -105,7 +111,20 @@ fun ControlWindow() {
         if (Ui.page != Page.NEW) Ui.newConfirm = false
     }
 
-    Box(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 20.dp)) {
+    // v0.1.1: D-pad / gamepad keys and joystick axes that reach this window go to the same PadInput as the volume's
+    val view = androidx.compose.ui.platform.LocalView.current
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    DisposableEffect(view) {
+        view.setOnGenericMotionListener { _, e -> graph.pad.onMotion(e, "control") }
+        onDispose { view.setOnGenericMotionListener(null) }
+    }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    Box(
+        Modifier.fillMaxSize()
+            .onPreviewKeyEvent { graph.pad.onKey(it.nativeKeyEvent, "control") }
+            .focusRequester(focus).focusable()
+            .padding(horizontal = 24.dp, vertical = 20.dp),
+    ) {
         when (Ui.page) {
             Page.PLAY -> PlayPage(state, settings, graph)
             Page.NEW -> NewPage(state, settings, graph)
@@ -205,6 +224,17 @@ private fun PlayPage(state: PlayState, settings: Settings, graph: Graph) {
     if (confirm != null) { ConfirmPage(confirm, state, settings, graph, onYes = { flow.confirm() }, onNo = { flow.cancelConfirm() }); return }
     if (state.result != null) { ResultPage(state, settings, graph); return }
     val busy = state.buttonTurning
+    if (state.phase == Phase.AIMING && state.aim != null) {
+        // v0.1.1 confirm phase (精确选择): the arrow keys, [确定] [取消] and the two turns replace the game buttons while a
+        // bead hangs over the selected peg; mute moves into the header. Same GameFlow calls as the thumbstick.
+        PageColumn {
+            Header(turnTitle(state), "aim", settings, graph, side = state.side, sub = modeLine(state), mute = true)
+            StatusCard(state, Modifier.fillMaxWidth().weight(1f).padding(top = 10.dp, bottom = 8.dp))
+            Txt(stringResource(R.string.pad_note), "aim/note", style = PicoTheme.typography.bodyMedium, color = QtColors.InkSecondary, modifier = Modifier.padding(bottom = 8.dp))
+            AimPad(state, graph)
+        }
+        return
+    }
     PageColumn {
         Header(turnTitle(state), "play", settings, graph, side = state.side, sub = modeLine(state), mute = false)
         InfoRow(state)
@@ -224,6 +254,72 @@ private fun PlayPage(state: PlayState, settings: Settings, graph: Graph) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             SecondaryButton(stringResource(R.string.btn_resign), "play/resign", onClick = { flow.requestConfirm(ConfirmKind.RESIGN) }, enabled = !busy && state.phase != Phase.CLEARING, icon = R.drawable.ic_flag, modifier = Modifier.weight(1f))
             SecondaryButton(stringResource(R.string.btn_restart), "play/restart", onClick = { flow.requestConfirm(ConfirmKind.RESTART) }, enabled = !busy && state.phase != Phase.CLEARING, icon = R.drawable.ic_replay, modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+/**
+ * The confirm-phase pad (v0.1.1): a cross of four 64 dp arrow keys round the selected peg's name, and on the right
+ * [确定] / [取消] / [左转] [右转] (64 dp). An arrow is greyed out when nothing selectable lies that way (edge / full pegs).
+ */
+@Composable
+private fun AimPad(state: PlayState, graph: Graph) {
+    val flow = graph.flow
+    val busy = state.buttonTurning
+    val gap = 8.dp
+    Row(Modifier.fillMaxWidth().height(PAD_KEY * 3 + gap * 2), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(Modifier.width(PAD_KEY * 3 + gap * 2), verticalArrangement = Arrangement.spacedBy(gap)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                Spacer(Modifier.width(PAD_KEY))
+                PadKey(Dir.UP, R.drawable.ic_arrow_up, R.string.pad_up, R.string.pad_up_cd, state, flow)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(gap), verticalAlignment = Alignment.CenterVertically) {
+                PadKey(Dir.LEFT, R.drawable.ic_arrow_left, R.string.pad_left, R.string.pad_left_cd, state, flow)
+                Box(Modifier.size(PAD_KEY).clip(RoundedCornerShape(18.dp)).background(QtColors.CardFace), contentAlignment = Alignment.Center) {
+                    Txt(state.aim?.let { Qubic.pegName(it) } ?: "", "aim/peg", style = PicoTheme.typography.titleLarge, color = QtColors.Ink)
+                }
+                PadKey(Dir.RIGHT, R.drawable.ic_arrow_right, R.string.pad_right, R.string.pad_right_cd, state, flow)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                Spacer(Modifier.width(PAD_KEY))
+                PadKey(Dir.DOWN, R.drawable.ic_arrow_down, R.string.pad_down, R.string.pad_down_cd, state, flow)
+            }
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(gap)) {
+            Button(
+                onClick = { flow.confirmAim("panel") }, modifier = Modifier.fillMaxWidth(), enabled = !busy,
+                size = ButtonDefaults.Regular.copy(height = PAD_KEY, minWidth = 96.dp), shape = RoundedCornerShape(32.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = PicoTheme.colorScheme.interaction, contentColor = PicoTheme.colorScheme.labelPrimaryLight),
+            ) {
+                Icon(painter = painterResource(R.drawable.ic_check), contentDescription = null, modifier = Modifier.size(24.dp), tint = PicoTheme.colorScheme.labelPrimaryLight)
+                Spacer(Modifier.width(8.dp))
+                // design-style: inherited-content-color Button
+                Txt(stringResource(R.string.pad_drop), "aim/drop", style = PicoTheme.typography.titleMedium, color = PicoTheme.colorScheme.labelPrimaryLight)
+            }
+            SecondaryButton(stringResource(R.string.pad_cancel), "aim/cancel", onClick = { flow.cancelSelection("panel") }, enabled = !busy, icon = R.drawable.ic_close, modifier = Modifier.fillMaxWidth(), height = PAD_KEY)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+                SecondaryButton(stringResource(R.string.pad_turn_left), "aim/left", onClick = { flow.turnButton(1) }, enabled = !busy, icon = R.drawable.ic_rotate_left, modifier = Modifier.weight(1f), height = PAD_KEY)
+                SecondaryButton(stringResource(R.string.pad_turn_right), "aim/right", onClick = { flow.turnButton(-1) }, enabled = !busy, icon = R.drawable.ic_rotate_right, modifier = Modifier.weight(1f), height = PAD_KEY)
+            }
+        }
+    }
+}
+
+private val PAD_KEY = 64.dp
+
+@Composable
+private fun PadKey(dir: Dir, icon: Int, label: Int, cd: Int, state: PlayState, flow: io.embodit.qubictower.domain.GameFlow) {
+    val enabled = flow.canNudge(dir, state)
+    val fg = PicoTheme.colorScheme.labelPrimary
+    Button(
+        onClick = { flow.nudge(dir, "panel") }, modifier = Modifier.width(PAD_KEY), enabled = enabled,
+        size = ButtonDefaults.Regular.copy(height = PAD_KEY, minWidth = PAD_KEY), shape = RoundedCornerShape(18.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = PicoTheme.colorScheme.fillSecondary, contentColor = fg),
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(painter = painterResource(icon), contentDescription = stringResource(cd), modifier = Modifier.size(24.dp), tint = fg)
+            // design-style: inherited-content-color Button
+            Txt(stringResource(label), "aim/key-${dir.name}", style = PicoTheme.typography.labelSmall, color = fg)
         }
     }
 }

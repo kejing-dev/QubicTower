@@ -24,6 +24,7 @@ import io.embodit.qubictower.domain.Settings
 import io.embodit.qubictower.domain.Turntable
 import io.embodit.qubictower.domain.V3
 import io.embodit.qubictower.platform.TAG
+import io.embodit.qubictower.ui.board.input.GazeTargets
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.acos
@@ -81,6 +82,9 @@ internal class BoardScene {
     private var blockRing: ModelEntity? = null
     private var alertRing: ModelEntity? = null
     private var hoverRing: ModelEntity? = null
+    private var selColumn: ModelEntity? = null
+    private val pegHolders = ArrayList<Entity>()
+    private var selRing: ModelEntity? = null
     private val litRings = ArrayList<ModelEntity>()
 
     // live push (turntable drag), main thread
@@ -174,18 +178,25 @@ internal class BoardScene {
         }
         towerRoot.addChild(turnRoot)
         turnRoot.addChild(clone(models.turntable).apply { setName("turntableModel") })
+        val cy = (Layout.COLLIDER_BOTTOM + Layout.COLLIDER_TOP) / 2
         for (p in 0 until 16) {
-            val peg = clone(models.peg).apply { setName("peg:$p") }
-            place(peg, V3(Layout.pegX(p), 0f, Layout.pegZ(p)))
-            val mesh = peg.meshNode() ?: peg
-            mesh.components[ModelComponent::class.java]?.materials?.set(0, r.frost)
-            // design pegColliders: 5 x 24.6 x 5 cm, local y −0.10 … +0.146 (covers the beads and the aimed bead);
-            // on the peg's mesh node so the system hover effect lights the peg itself (board-input README)
-            val hit = Entity().apply { setName("pegHit:$p"); place(this, V3(0f, (Layout.COLLIDER_BOTTOM + Layout.COLLIDER_TOP) / 2, 0f)) }
-            collider(hit, r.pegShape, r)
-            mesh.components.set(HoverEffectComponent())
-            peg.addChild(hit)
-            turnRoot.addChild(peg)
+            // board-input 通用模式 (v0.1.1): the HOLDER "peg:<n>" carries Collision + Interactable + system HoverEffect
+            // (design pegColliders 5 x 24.6 x 5 cm, local y −0.10 … +0.146: the peg, its beads and the hanging bead); the
+            // frosted peg model and an opaque Ø 5 mm marker on the peg top are its children, so the system highlight is
+            // drawn on visible meshes (v0.1.0 had the collider on a mesh-less child: nothing to light).
+            val holder = Entity().apply { setName(BoardNames.peg(p)) }
+            place(holder, V3(Layout.pegX(p), cy, Layout.pegZ(p)))
+            GazeTargets.install(holder, r.pegShape, r.physics)
+            val peg = clone(models.peg).apply { setName(BoardNames.pegModel(p)) }
+            place(peg, V3(0f, -cy, 0f))
+            (peg.meshNode() ?: peg).components[ModelComponent::class.java]?.materials?.set(0, r.frost)
+            holder.addChild(peg)
+            holder.addChild(ModelEntity(r.marker, r.markerMat).apply {
+                setName(BoardNames.pegMark(p))
+                place(this, V3(0f, Layout.PEG_TOP + SceneResources.MARKER_H / 2 - cy, 0f))
+            })
+            turnRoot.addChild(holder)
+            pegHolders += holder
         }
         for (side in 0..1) repeat(Qubic.BEADS) { i ->
             val e = clone(models.bead).apply { setName("bead:$side:$i"); enabled = false }
@@ -200,6 +211,8 @@ internal class BoardScene {
         blockRing = mark(r.ringCell, r.red, "blockRing")
         alertRing = mark(r.ringTop, r.red, "alertRing")
         hoverRing = mark(r.ringCell, r.hover, "hoverRing")
+        selColumn = mark(r.beam, r.selColumn, "selColumn")
+        selRing = mark(r.ringTop, r.selRing, "selRing")
         repeat(16) { litRings += mark(r.ringTop, r.lit, "litTop:$it") }
         tags = tagEntities
         tags.forEach { (e, at) -> sceneRoot.addChild(e); place(e, at) }
@@ -410,6 +423,18 @@ internal class BoardScene {
         ring(alertRing, if (flash) pegAt(al!!.peg, Layout.PEG_TOP + 0.004f) else null, 1.3f)
         val hv = hoverPeg?.takeIf { now - hoverAt < 250 && it != aimPeg && st.phase in setOf(Phase.IDLE, Phase.AIMING) }
         ring(hoverRing, hv?.let { p -> b.landing(p).takeIf { it >= 0 }?.let { cellAt(it) } })
+        // the selected peg (confirm phase, v0.1.1): a soft light column along the peg + a ring on its top (drawn by the
+        // app: the selection state is ours, not the system hover's)
+        val sel = st.aim?.takeIf { st.phase == Phase.AIMING }
+        selColumn?.let { e ->
+            if (sel == null) e.enabled = false else {
+                place(e, pegAt(sel, (Layout.PEG_BOTTOM + Layout.PEG_TOP) / 2))
+                e.transform().setQuaternion(tiltQ.times(yQ(deg)))
+                e.transform().setScaleVector(Vector3(SceneResources.SEL_COLUMN_D, Layout.PEG_TOP - Layout.PEG_BOTTOM, SceneResources.SEL_COLUMN_D))
+                e.enabled = true
+            }
+        }
+        ring(selRing, sel?.let { pegAt(it, Layout.PEG_TOP + 0.003f) }, if (reduced) 1.5f else 1.5f + 0.08f * sin(clock * 4f))
         val litOn = st.lit && st.humansTurn && st.phase in setOf(Phase.IDLE, Phase.AIMING)
         litRings.forEachIndexed { p, e -> ring(e, if (litOn && b.canDrop(p)) pegAt(p, Layout.PEG_TOP + 0.004f) else null, if (reduced) 1f else 1f + 0.12f * sin(clock * 3f + p)) }
     }
@@ -435,6 +460,27 @@ internal class BoardScene {
         return Quat(Vector3(ax.x / l, 0f, ax.z / l), acos(cosA))
     }
 
+    /**
+     * Debug `replay <peg>` (board-input README 必带单测 4): the REAL scene entities a ray can hit for peg [p] — the holder
+     * (collider), its Ø 5 mm marker, the peg model and the deepest mesh node of the model — for resolveUp.
+     */
+    fun replayTargets(p: Int): List<Pair<String, Entity>> {
+        val holder = pegHolders.getOrNull(p) ?: return emptyList()
+        val out = ArrayList<Pair<String, Entity>>()
+        out += "holder" to holder
+        for (c in holder.getChildren()) {
+            val n = runCatching { c.getName() }.getOrDefault("")
+            if (n.startsWith("pegMark")) out += "marker" to c
+            if (n.startsWith("pegModel")) {
+                out += "model" to c
+                var d = c
+                while (d.getChildren().isNotEmpty()) d = d.getChildren().first()
+                if (d !== c) out += "mesh" to d
+            }
+        }
+        return out
+    }
+
     fun evidence(): String {
         val deg = shownDeg(SystemClock.uptimeMillis())
         return "deg=$deg halfY=$regionHalfY A1L0=${Layout.onTable(Layout.cellLocal(0), deg)} D4L3=${Layout.onTable(Layout.cellLocal(63), deg)} " +
@@ -447,21 +493,6 @@ internal class BoardScene {
     }
 
     companion object {
-        sealed interface Hit
-        data class PegHit(val peg: Int) : Hit
-        data object PlinthHit : Hit
-        data object GripHit : Hit
-        data object NoHit : Hit
-
-        fun hitOf(name: String?): Hit {
-            if (name == null) return NoHit
-            val f = name.split(":")
-            return when (f[0]) {
-                "peg", "pegHit" -> f.getOrNull(1)?.toIntOrNull()?.takeIf { it in 0..15 }?.let { PegHit(it) } ?: NoHit
-                "plinth" -> PlinthHit
-                "grip" -> GripHit
-                else -> NoHit
-            }
-        }
+        fun hitOf(name: String?): BoardNames.Hit = BoardNames.hitOf(name)
     }
 }

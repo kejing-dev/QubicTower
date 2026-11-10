@@ -70,6 +70,36 @@ class DebugCommandReceiver : BroadcastReceiver() {
             "aim", "tapPeg" -> peg(a)?.let { flow.tapPeg(it) }
             "drop" -> { val p = peg(a) ?: flow.state.value.aim; if (p != null) { if (flow.state.value.aim != p) flow.tapPeg(p); flow.tapPeg(p) } }
             "tap" -> route(graph, a)
+            // v0.1.1 精确选择: the confirm-phase moves through the same PadInput / GameFlow calls as the stick and the panel
+            "nudge" -> io.embodit.qubictower.domain.Dir.parse(a)?.let { graph.pad.step(it, "debug") }
+            "pad" -> when (a) {
+                "confirm", "a", "trigger" -> graph.pad.confirm("debug")
+                "cancel", "b" -> graph.pad.cancel("debug")
+                else -> io.embodit.qubictower.domain.Dir.parse(a)?.let { graph.pad.step(it, "debug") }
+            }
+            // stick "<x> <y>": one thumbstick sample through the 0.6 / back-to-centre stepper (send "0 0" between pushes)
+            "stick" -> a.split(" ").mapNotNull { it.toFloatOrNull() }.takeIf { it.size == 2 }?.let { (x, y) -> graph.pad.debugStick(x, y) }
+            "padstatus" -> Log.i(TAG, "PAD provider ${graph.pad.providerStatus}")
+            // replay <peg> [hand-ray|eye-hand|controller]: real scene entities -> resolveUp -> the template's onTap (README 必带单测 4)
+            "replay" -> {
+                val f = a.split(" ").filter { it.isNotBlank() }
+                val p = f.getOrNull(0)?.let { peg(it) }
+                val src = io.embodit.qubictower.ui.board.input.InputSource.entries.firstOrNull { it.label == f.getOrNull(1) } ?: io.embodit.qubictower.ui.board.input.InputSource.HAND_RAY
+                val scene = SceneHolder.scene
+                val listener = SceneHolder.listener
+                if (p == null || scene == null || listener == null) Log.w(TAG, "REPLAY not ready peg=$p")
+                else {
+                    var last: String? = null
+                    for ((label, e) in scene.replayTargets(p)) {
+                        val (t, path) = io.embodit.qubictower.ui.board.input.resolveUp(e, io.embodit.qubictower.ui.board.BoardTargets)
+                        val sq = io.embodit.qubictower.ui.board.BoardNames.pegOf(t)?.let { Qubic.pegName(it) } ?: "-"
+                        val line = "REPLAY src=${src.label} hit=$label path=$path -> square=$sq"
+                        io.embodit.qubictower.ui.board.input.BoardInputLog.write(TAG, line)
+                        last = t
+                    }
+                    listener.onTap(last, src, null)
+                }
+            }
             "cancel" -> flow.tapPlinth()
             "turn" -> when (a) { "left" -> flow.turnButton(1); "right" -> flow.turnButton(-1); else -> a.toIntOrNull()?.let { flow.turnTo(Turntable.normalize(it)) } }
             "push" -> a.toFloatOrNull()?.let { d -> val s0 = flow.displayDeg(); SceneHolder.scene?.beginPush(s0); SceneHolder.scene?.pushTo(d); later(600) { SceneHolder.scene?.endPush(); flow.pushRelease(s0, d) } }

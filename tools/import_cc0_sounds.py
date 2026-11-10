@@ -17,9 +17,7 @@ RATE = 22050
 # event -> (max seconds, [pack/file, ...])
 MAP = {
     "lift": (0.30, ["kenney_casino-audio/Audio/chips-handle-1.ogg", "kenney_casino-audio/Audio/chips-handle-2.ogg", "kenney_casino-audio/Audio/chips-handle-3.ogg"]),
-    "slide": (0.25, ["kenney_casino-audio/Audio/chips-handle-4.ogg", "kenney_casino-audio/Audio/chips-handle-5.ogg", "kenney_casino-audio/Audio/chips-handle-6.ogg"]),
     "tick": (0.14, ["kenney_impact-sounds/Audio/impactGlass_light_000.ogg", "kenney_impact-sounds/Audio/impactGlass_light_001.ogg", "kenney_impact-sounds/Audio/impactGlass_light_002.ogg"]),
-    "land": (0.35, ["kenney_casino-audio/Audio/chip-lay-1.ogg", "kenney_casino-audio/Audio/chip-lay-2.ogg", "kenney_casino-audio/Audio/chip-lay-3.ogg"]),
     "return": (0.45, ["kenney_casino-audio/Audio/chips-stack-1.ogg", "kenney_casino-audio/Audio/chips-stack-2.ogg", "kenney_casino-audio/Audio/chips-stack-3.ogg"]),
     "turn": (0.12, ["kenney_impact-sounds/Audio/impactWood_light_000.ogg", "kenney_impact-sounds/Audio/impactWood_light_001.ogg", "kenney_impact-sounds/Audio/impactWood_light_002.ogg"]),
     "snap": (0.22, ["kenney_impact-sounds/Audio/impactWood_light_003.ogg", "kenney_impact-sounds/Audio/impactWood_light_004.ogg"]),

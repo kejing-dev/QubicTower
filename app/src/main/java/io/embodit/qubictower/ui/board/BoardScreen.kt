@@ -24,6 +24,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -84,6 +87,7 @@ class BoardFrameSystem : System() {
 internal object SceneHolder {
     @Volatile var scene: BoardScene? = null
     @Volatile var graph: Graph? = null
+    @Volatile var listener: BoardListener? = null
 }
 
 private const val SEAT = "seatTag"
@@ -135,13 +139,26 @@ fun BoardScreen() {
         }
     }
 
+    // v0.1.1 精确选择: controller provider + Android key / joystick events -> PadInput (logged as PAD lines)
+    val view = androidx.compose.ui.platform.LocalView.current
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    DisposableEffect(view) {
+        graph.pad.start()
+        view.setOnGenericMotionListener { _, e -> graph.pad.onMotion(e, "volume") }
+        onDispose { view.setOnGenericMotionListener(null); graph.pad.stop() }
+    }
+    androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+
     SpatialView(
         modifier = Modifier
             .fillMaxSize()
+            .onPreviewKeyEvent { graph.pad.onKey(it.nativeKeyEvent, "volume") }
+            .focusRequester(focus)
+            .focusable()
             .onSizeChanged { viewSize = it }
             // D50: the factory board-input template (taps + short drags the system reports as drags, targets resolved
             // up the parent chain, hover) for hand ray, controller ray and eye-hand alike.
-            .boardInput(BoardTargets, remember(graph, scene) { BoardListener(graph, scene) }, BoardInputConfig(logTag = TAG)),
+            .boardInput(BoardTargets, remember(graph, scene) { BoardListener(graph, scene).also { SceneHolder.listener = it } }, BoardInputConfig(logTag = TAG)),
         attachments = {
             AttachmentPanel(SEAT) { TagRoot(graph) { st -> SeatTag(st, graph) } }
             AttachmentPanel(COUNT_A) { TagRoot(graph) { st -> CountTag(st, Qubic.AMBER) } }
@@ -183,29 +200,22 @@ fun BoardScreen() {
     )
 }
 
-/** Hit entity (or an ancestor) -> the collider name the game knows: peg:<n>, plinth, grip. */
-internal object BoardTargets : TargetResolver<String> {
-    override fun resolve(entity: Entity): String? {
-        val name = runCatching { entity.getName() }.getOrNull() ?: return null
-        return when (val h = BoardScene.hitOf(name)) {
-            is BoardScene.Companion.PegHit -> "peg:${h.peg}"
-            BoardScene.Companion.PlinthHit -> "plinth"
-            BoardScene.Companion.GripHit -> "grip"
-            BoardScene.Companion.NoHit -> null
-        }
-    }
-}
+/** Hit entity (or an ancestor) -> the collider name the game knows: peg:<n>, plinth, grip (pure half in BoardNames). */
+internal val BoardTargets: TargetResolver<String> = TargetResolver.byName(BoardNames::resolveName)
 
 /** Every resolved tap goes through [route] (the same calls the panel and the debug broadcast make); a rim drag pushes. */
 internal class BoardListener(private val graph: Graph, private val scene: BoardScene) : BoardInputListener<String> {
     private var lastTick = 0
     override fun onTap(target: String?, source: InputSource, position: Offset3D?) {
         Log.i(TAG, "PINCH target=$target src=${source.label}")
+        // board-input 必带单测: every tap logs the square it resolved to (square=- for a peg-less target is a bug on a peg)
+        io.embodit.qubictower.ui.board.input.BoardInputLog.write(TAG, "INPUT tap src=${source.label} target=$target -> square=${BoardNames.pegOf(target)?.let { Qubic.pegName(it) } ?: "-"}")
+        graph.pad.noteBoardTap()
         route(graph, target)
     }
 
     override fun onHover(target: String?, source: InputSource) {
-        scene.setHover((BoardScene.hitOf(target) as? BoardScene.Companion.PegHit)?.peg)
+        scene.setHover((BoardScene.hitOf(target) as? BoardNames.PegHit)?.peg)
     }
 
     override fun onDragStart(target: String, source: InputSource): Boolean {
@@ -245,16 +255,16 @@ internal class BoardListener(private val graph: Graph, private val scene: BoardS
 internal fun route(graph: Graph, name: String?) {
     val flow = graph.flow
     val hit = BoardScene.hitOf(name)
-    if (hit != BoardScene.Companion.NoHit && !graph.window.panelOpen) {
+    if (hit != BoardNames.NoHit && !graph.window.panelOpen) {
         Log.i(TAG, "S10 pinch reopens the control window (consumed)")
         graph.window.request("pinch")
         return
     }
     when (hit) {
-        is BoardScene.Companion.PegHit -> flow.tapPeg(hit.peg)
-        BoardScene.Companion.PlinthHit -> flow.tapPlinth()
-        BoardScene.Companion.GripHit -> flow.tapRim()
-        BoardScene.Companion.NoHit -> Unit
+        is BoardNames.PegHit -> flow.tapPeg(hit.peg)
+        BoardNames.PlinthHit -> flow.tapPlinth()
+        BoardNames.GripHit -> flow.tapRim()
+        BoardNames.NoHit -> Unit
     }
 }
 

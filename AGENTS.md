@@ -1,7 +1,7 @@
 # 立体四子棋 Qubic Tower: project guidance
 
 Qubic (4 x 4 x 4 gravity four-in-a-row, 76 lines) for PICO OS 6 Shared Space, PICO Spatial SDK BOM 6.1.9, package
-`io.embodit.qubictower`, v0.1.0. Design contract: spatial-app-factory `apps/qubic-tower/design-package.json` (v2; profile A12:
+`io.embodit.qubictower`, v0.1.1 (v0.1.0 + the headset feedback 2026-11-09: precise selection, see below). Design contract: spatial-app-factory `apps/qubic-tower/design-package.json` (v2; profile A12:
 one main loop, `v2[]` not built: no drag-to-drop, no tilt setting, no hover follow, no replay / import, no puzzles, no skins,
 no 3x3x3 / 5x5x5, no streaks, no danger pegs, no one-tap drop, no coin). Skeleton from the Royal Ur project (itself Five
 Stones / CloudAir: two containers, theme, sound pool, level gate, board-input template); Qubic rules / AI / flow / scene are new.
@@ -30,8 +30,25 @@ Stones / CloudAir: two containers, theme, sound pool, level gate, board-input te
 | `platform/*` | Application / Graph, SoundPlayer, WindowCtl (+ LevelGate); debug builds add `DebugCommandReceiver` |
 | `tools/` | `build_models.py` (all GLBs, `--test-f` = F↑ rim labels), `import_cc0_sounds.py` + `make_sounds.py`, `build_icon.py`, `loudness.py`, `shots.py`, `blank.py`, `qt.sh` |
 
+## Precise selection (v0.1.1, board-input README「精确选择」, board-game §15.5)
+S04 is the confirm phase: the first pinch on a peg only selects it (blue light column round the peg + blue ring on its
+top, drawn by the app, plus the hanging bead / ghost ring / lines); a second pinch on the same peg, [确定], the trigger or A
+drops; another peg re-selects; the plinth, [取消] or B cancels. Up / down / left / right (`domain/Nudge.kt`) move the
+selection one peg as the user sees the tower (up = the far row), following the turntable's quarter turn; full pegs are
+stepped over, the edge stops. Sources, all into `GameFlow.nudge / confirmAim / cancelSelection`:
+- the control window's game page swaps its buttons for a 64 dp cross + [确定] [取消] [左转] [右转] while S04 is on;
+- `platform/PadInput.kt`: SDK `ControllerTrackingProvider` actions (stick past 0.6 then back to centre = one step;
+  A / X confirm, B / Y cancel, trigger confirms only if no board TAP came within 300 ms), Android key events (DPAD_*,
+  BUTTON_A / B / R2, ENTER, ESCAPE, BACK — consumed only in S04) and joystick axes, each logged as `PAD …`
+  (logcat + `files/input-log.txt`). Whether Shared Space delivers any of them is the open question in
+  feedback/pico-cli-feedback.md 待核实「手柄摇杆方向事件」.
+Selecting, moving and cancelling are silent; ticks and the land share one stream (SoundPlayer.GROUP).
+Pegs: holder `peg:<n>` (collider + Interactable + system HoverEffect) with children `pegModel:<n>` (frosted GLB) and
+`pegMark:<n>` (Ø 5 mm opaque cap on the top). Names only from `ui/board/BoardNames.kt`; replay tests in
+`app/src/test/.../ui/board/BoardTargetTest.kt` (incl. the v0.1.0 headset input-log).
+
 Rules - state - render: the scene only renders `PlayState`. Volume input goes through the factory board-input template
-(`ui/board/input/BoardInput.kt`, D50); colliders: `peg:<n>` (5 x 24.6 x 5 cm on each peg's mesh node, + system hover),
+(`ui/board/input/BoardInput.kt`, D50); colliders: `peg:<n>` (5 x 24.6 x 5 cm holder over the peg model + marker, + system hover),
 `plinth` (thin top box: cancel the aim), `grip` (12 boxes round the turntable rim: drag = push the turntable).
 Every pinch goes through `route()` to the same `GameFlow` calls the panel and the debug broadcast use.
 
@@ -39,7 +56,7 @@ Every pinch goes through `route()` to the same `GameFlow` calls the panel and th
 ```bash
 export JAVA_HOME=~/.pico/primer-cli/jdk/jdk-21.0.13+9/Contents/Home
 ./gradlew assembleDebug :app:testDebugUnitTest      # rules, AI ladder (200 games x 3), flow, layout / D35, turntable jitter, display
-python3 tools/build_models.py ; python3 tools/import_cc0_sounds.py ; python3 tools/make_sounds.py ; python3 tools/build_icon.py --icon512 icon.png
+python3 tools/build_models.py ; python3 tools/import_cc0_sounds.py ; uv run --system-certs --with numpy --with scipy python3 tools/import_beads.py ; python3 tools/make_sounds.py ; python3 tools/build_icon.py --icon512 icon.png
 DEV=emulator-5562 tools/qt.sh install
 ```
 Emulators are shared: `python3 -I bin/emu_borrow.py borrow qubic-tower` in the factory, `return` after.
@@ -65,6 +82,8 @@ Emulators are shared: `python3 -I bin/emu_borrow.py borrow qubic-tower` in the f
 | S13 确认 | `goto S13` (restart) · `resign` · `exitask` · `newask` · 2P undo: `new pvp`, `import 5a`, `undo` · `confirm` / `no` | |
 | S14 转塔中 | `goto S14` (slow 4) · `turn 0-3|left|right` · `push <deg>` | |
 | S15 恢复 | force-stop, relaunch | moves + orientation restored |
+| S04 confirm phase (v0.1.1) | `goto S04` then `nudge up|down|left|right` · `pad confirm|cancel|up…` · `stick <x> <y>` (send `stick 0 0` between pushes) · `padstatus` · `adb shell input keyevent DPAD_RIGHT` (Android key path) | |
+| Hit replay | `replay <peg> [hand-ray|eye-hand|controller]` | real scene entities -> resolveUp -> the template's onTap; `REPLAY … -> square=` |
 Modifiers: `lang zh|en|system`, `reduced on|off`, `sound on|off`, `volume 0-2`, `slow 1|2|4`, `freeze MS|off`, `eye E0|E1|E2|off`
 (see-through eye), `xray on|off`, `see on|off`, `seed N`, `dump`, `evidence`.
 
